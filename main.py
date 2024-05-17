@@ -30,12 +30,12 @@ class AudioApp:
         # 描画用のフィギュアとサブプロットを準備
         self.fig = Figure(figsize=(8, 3), dpi=100)
         self.ax = self.fig.add_subplot(111)
-        # self.line, = self.ax.plot(self.data)
         self.ax.plot(self.data)
         self.playhead, = self.ax.plot([], [], 'r', lw=2)  # 再生位置の縦線を初期化
         self.ax.xaxis.set_major_locator(MultipleLocator(self.fs))  # 1秒ごとに目盛りを設定
         self.ax.xaxis.set_major_formatter(FuncFormatter(self.format_seconds))  # 5秒ごとに数値を表示
         self.ax.yaxis.set_visible(False)  # 縦軸の数値表示を削除
+        self.fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.1)  # パディングを調整
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.master)
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=1)
