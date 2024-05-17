@@ -26,6 +26,8 @@ class AudioApp:
         self.start_index = 0  # 初期再生開始位置
         self.current_playback_position = 0  # 現在の再生位置
         self.display_window_seconds = 10  # 表示範囲を10秒に設定
+        self.is_playing = False  # 再生中かどうかを示すフラグ
+        self.play_lock = threading.Lock()  # 再生制御のためのロック
 
         # 描画用のフィギュアとサブプロットを準備
         self.fig = Figure(figsize=(8, 3), dpi=100)
@@ -110,15 +112,21 @@ class AudioApp:
 
     def start_playback(self):
         """再生ボタンが押されたときの処理"""
-        self.stop_audio_playback()  # 既存の再生を停止
-        self.play_thread = threading.Thread(target=self.play_audio, args=(self.current_playback_position,))
-        self.play_thread.start()
+        with self.play_lock:  # 再生ロックを使用して競合を防止
+            if self.is_playing:
+                return  # 再生中の場合は無視する
+
+            self.is_playing = True  # 再生中フラグを立てる
+            self.play_thread = threading.Thread(target=self.play_audio, args=(self.current_playback_position,))
+            self.play_thread.start()
 
     def stop_audio_playback(self):
         """現在の音声再生を停止"""
-        if self.play_obj:
-            self.play_obj.stop()  # simpleaudioの再生を直接停止
-            self.play_obj = None
+        with self.play_lock:  # 再生ロックを使用して競合を防止
+            if self.play_obj:
+                self.play_obj.stop()  # simpleaudioの再生を直接停止
+                self.play_obj = None
+            self.is_playing = False  # 再生中フラグを下げる
 
     def play_audio(self, start_sample):
         """指定された位置から音声再生"""
@@ -136,6 +144,8 @@ class AudioApp:
             self.update_waveform_display(current_position_ms)
 
         self.play_obj = None  # 再生が終了または中断されたらplay_objをNoneに設定
+        with self.play_lock:
+            self.is_playing = False  # 再生中フラグを下げる
 
     def update_waveform_display(self, position_ms):
         """再生位置を中央にして波形と縦線を更新"""
