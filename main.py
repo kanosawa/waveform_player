@@ -70,6 +70,10 @@ class AudioApp:
         self.highlight_patch = None
         self.drag_threshold = 5  # ドラッグと見なすための移動距離の閾値
 
+        # 選択範囲の初期化
+        self.selection_start = None
+        self.selection_end = None
+
     def format_seconds(self, x, pos):
         """X軸のラベルを秒単位でフォーマットする"""
         seconds = x / self.fs
@@ -119,6 +123,8 @@ class AudioApp:
         if self.highlight_patch is not None:
             self.highlight_patch.remove()
             self.highlight_patch = None
+        self.selection_start = None
+        self.selection_end = None
         self.canvas.draw()
 
     def on_release(self, event):
@@ -136,9 +142,11 @@ class AudioApp:
             return
         start_time = min(x0, x1) / self.fs
         end_time = max(x0, x1) / self.fs
+        self.selection_start = min(x0, x1)
+        self.selection_end = max(x0, x1)
         if self.highlight_patch is not None:
             self.highlight_patch.remove()
-        self.highlight_patch = self.ax.axvspan(min(x0, x1), max(x0, x1), color='black', alpha=0.5)
+        self.highlight_patch = self.ax.axvspan(self.selection_start, self.selection_end, color='black', alpha=0.5)
         self.canvas.draw()
         print(f"Start Time: {start_time} s, End Time: {end_time} s")
 
@@ -162,7 +170,14 @@ class AudioApp:
                 return  # 再生中の場合は無視する
 
             self.is_playing = True  # 再生中フラグを立てる
-            self.play_thread = threading.Thread(target=self.play_audio, args=(self.current_playback_position,))
+
+            if self.selection_start is not None and self.selection_end is not None:
+                # 選択範囲の再生
+                self.play_thread = threading.Thread(target=self.play_audio_selection,
+                                                    args=(self.selection_start, self.selection_end))
+            else:
+                # 通常再生
+                self.play_thread = threading.Thread(target=self.play_audio, args=(self.current_playback_position,))
             self.play_thread.start()
 
     def stop_audio_playback(self):
@@ -185,6 +200,30 @@ class AudioApp:
         while self.play_obj and self.play_obj.is_playing():
             elapsed_time = time.time() - start_time
             current_position_ms = start_ms + int(elapsed_time * 1000)
+            self.current_playback_position = int(current_position_ms / 1000 * self.fs)
+            self.update_waveform_display(current_position_ms)
+            time.sleep(0.05)  # UIがフリーズしないように少し待機
+
+        self.play_obj = None  # 再生が終了または中断されたらplay_objをNoneに設定
+        with self.play_lock:
+            self.is_playing = False  # 再生中フラグを下げる
+
+    def play_audio_selection(self, start_sample, end_sample):
+        """指定された範囲の音声を再生"""
+        start_ms = int((start_sample / len(self.data)) * len(self.audio))
+        end_ms = int((end_sample / len(self.data)) * len(self.audio))
+        segment = self.audio[start_ms:end_ms]
+        self.play_obj = sa.play_buffer(segment.raw_data, num_channels=segment.channels,
+                                       bytes_per_sample=segment.sample_width, sample_rate=segment.frame_rate)
+
+        # 再生中の波形表示を更新
+        start_time = time.time()
+        while self.play_obj and self.play_obj.is_playing():
+            elapsed_time = time.time() - start_time
+            current_position_ms = start_ms + int(elapsed_time * 1000)
+            if current_position_ms >= end_ms:
+                self.play_obj.stop()
+                break
             self.current_playback_position = int(current_position_ms / 1000 * self.fs)
             self.update_waveform_display(current_position_ms)
 
