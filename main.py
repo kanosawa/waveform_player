@@ -48,7 +48,9 @@ class AudioApp:
         self.update_scrollbar()
 
         # クリックイベントの設定
-        self.canvas.mpl_connect("button_press_event", self.on_click)
+        self.canvas.mpl_connect("button_press_event", self.on_press)
+        self.canvas.mpl_connect("button_release_event", self.on_release)
+        self.canvas.mpl_connect("motion_notify_event", self.on_motion)
 
         # 再生ボタンと停止ボタンの追加
         self.play_button = Button(self.master, text="Play", command=self.start_playback)
@@ -62,6 +64,11 @@ class AudioApp:
         # 現在の再生用スレッド
         self.play_thread = None
         self.play_obj = None  # simpleaudioのPlayObject
+
+        # ドラッグアンドドロップの初期化
+        self.press = None
+        self.highlight_patch = None
+        self.drag_threshold = 5  # ドラッグと見なすための移動距離の閾値
 
     def format_seconds(self, x, pos):
         """X軸のラベルを秒単位でフォーマットする"""
@@ -104,11 +111,49 @@ class AudioApp:
             self.update_scrollbar()
             self.update_waveform_display(self.current_playback_position / self.fs * 1000)  # クリックされた位置を反映して波形を更新
 
-    def on_click(self, event):
-        """クリックされた位置に基づいて再生開始位置を設定"""
-        if event.xdata is not None:
-            self.current_playback_position = int(event.xdata)
-            self.update_waveform_display(self.current_playback_position / self.fs * 1000)  # クリックされた位置を反映して波形を更新
+    def on_press(self, event):
+        """ドラッグ開始位置を取得"""
+        if event.inaxes != self.ax:
+            return
+        self.press = (event.xdata, event.ydata)
+        if self.highlight_patch is not None:
+            self.highlight_patch.remove()
+            self.highlight_patch = None
+        self.canvas.draw()
+
+    def on_release(self, event):
+        """ドラッグ終了位置を取得し、時間範囲を計算して反転表示"""
+        if event.inaxes != self.ax:
+            return
+        if self.press is None:
+            return
+        x0, y0 = self.press
+        x1, y1 = event.xdata, event.ydata
+        self.press = None
+        if abs(x1 - x0) < self.drag_threshold and abs(y1 - y0) < self.drag_threshold:
+            self.current_playback_position = int(x1)
+            self.update_waveform_display(self.current_playback_position / self.fs * 1000)
+            return
+        start_time = min(x0, x1) / self.fs
+        end_time = max(x0, x1) / self.fs
+        if self.highlight_patch is not None:
+            self.highlight_patch.remove()
+        self.highlight_patch = self.ax.axvspan(min(x0, x1), max(x0, x1), color='black', alpha=0.5)
+        self.canvas.draw()
+        print(f"Start Time: {start_time} s, End Time: {end_time} s")
+
+    def on_motion(self, event):
+        """ドラッグ中の範囲をハイライト"""
+        if self.press is None or event.inaxes != self.ax:
+            return
+        x0, y0 = self.press
+        x1, y1 = event.xdata, event.ydata
+        if abs(x1 - x0) < self.drag_threshold and abs(y1 - y0) < self.drag_threshold:
+            return
+        if self.highlight_patch is not None:
+            self.highlight_patch.remove()
+        self.highlight_patch = self.ax.axvspan(min(x0, x1), max(x0, x1), color='black', alpha=0.5)
+        self.canvas.draw()
 
     def start_playback(self):
         """再生ボタンが押されたときの処理"""
