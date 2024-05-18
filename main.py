@@ -4,11 +4,10 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.ticker import MultipleLocator, FuncFormatter
 from pydub import AudioSegment
+from pydub.playback import _play_with_simpleaudio
 import numpy as np
 import threading
 import time
-import simpleaudio as sa
-
 
 class AudioApp:
     def __init__(self, master):
@@ -190,10 +189,9 @@ class AudioApp:
 
     def play_audio(self, start_sample):
         """指定された位置から音声再生"""
-        start_ms = int((start_sample / len(self.data)) * len(self.audio))
+        start_ms = int((start_sample / self.fs) * 1000)
         segment = self.audio[start_ms:]
-        self.play_obj = sa.play_buffer(segment.raw_data, num_channels=segment.channels,
-                                       bytes_per_sample=segment.sample_width, sample_rate=segment.frame_rate)
+        self.play_obj = _play_with_simpleaudio(segment)
 
         # 再生中の波形表示を更新
         start_time = time.time()
@@ -210,11 +208,10 @@ class AudioApp:
 
     def play_audio_selection(self, start_sample, end_sample):
         """指定された範囲の音声を再生"""
-        start_ms = int((start_sample / len(self.data)) * len(self.audio))
-        end_ms = int((end_sample / len(self.data)) * len(self.audio))
+        start_ms = int((start_sample / self.fs) * 1000)
+        end_ms = int((end_sample / self.fs) * 1000)
         segment = self.audio[start_ms:end_ms]
-        self.play_obj = sa.play_buffer(segment.raw_data, num_channels=segment.channels,
-                                       bytes_per_sample=segment.sample_width, sample_rate=segment.frame_rate)
+        self.play_obj = _play_with_simpleaudio(segment)
 
         # 再生中の波形表示を更新
         start_time = time.time()
